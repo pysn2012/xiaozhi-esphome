@@ -1,77 +1,124 @@
-# 工作流名称，在 GitHub Actions 面板中显示
+# 工作流名称
 name: build Lichuang_s3_cam ESPHome
 
-# 触发条件：可选多种触发方式，按需启用
+# 触发条件
 on:
-  # 1. 手动触发（推荐，可在 GitHub 页面手动点击运行编译）
-  workflow_dispatch:
-  # 2. 当仓库有 push 提交时自动触发（推送到 main 分支时编译，可注释或修改分支）
-  # push:
+  workflow_dispatch:  # 手动触发（推荐）
+  # push:  # 自动触发（可选，按需启用）
   #   branches: [ main ]
-  #   # 仅当指定文件修改时触发，避免无关提交浪费资源
   #   paths:
-  #     - 'devices/Under_Development/Modular/Lichuang_s3_cam.yaml'
-  #     - 'devices/Under_Development/Modular/core.yaml'
-  #     - 'devices/Under_Development/Modular/HW/**'
-  #     - 'devices/Under_Development/Modular/display_pages.yaml'
-  # 3. 当有 pull request 提交到 main 分支时触发
-  # pull_request:
-  #   branches: [ main ]
+  #     - 'devices/Under_Development/Modular/**'
 
-# 工作流任务定义
 jobs:
   compile-esphome:
-    # 运行环境：使用 Ubuntu 最新版（GitHub 托管虚拟机）
     runs-on: ubuntu-latest
-    # 任务步骤
     steps:
-      # 步骤1：拉取你的仓库代码到虚拟机
+      # 步骤1：拉取仓库代码
       - name: 拉取仓库代码
         uses: actions/checkout@v4
 
-      # 步骤2：设置 Python 环境（ESPHome 依赖 Python）
+      # 步骤2：配置 Python 环境
       - name: 配置 Python 环境
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'  # 兼容 ESPHome 的 Python 版本，推荐 3.9+
+          python-version: '3.11'
 
-      # 步骤3：安装 ESPHome 依赖
+      # 步骤3：缓存 Python 依赖（ESPHome 及其依赖包，避免重复下载）
+      - name: 缓存 Python 依赖包
+        uses: actions/cache@v4
+        id: cache-python-deps
+        with:
+          # 缓存目录：Python 的 site-packages 目录（存放 ESPHome 等依赖）
+          path: |
+            ~/.cache/pip
+            $(python -m site --user-site)
+          # 缓存密钥：基于 requirements.txt 内容生成，若依赖不变则复用缓存
+          # 若你没有 requirements.txt，直接使用固定密钥（如 esphome-python-deps-v1）
+          key: ${{ runner.os }}-python-${{ hashFiles('**/requirements.txt') }}-esphome-v1
+          # 缓存回退：若当前密钥未命中，使用同系统的最新缓存
+          restore-keys: |
+            ${{ runner.os }}-python-
+
+      # 步骤4：安装 ESPHome（缓存命中时跳过重复安装）
       - name: 安装 ESPHome
         run: |
           python -m pip install --upgrade pip
           pip install esphome
+        # 仅当缓存未命中时执行（可选，进一步优化，若缓存命中则跳过）
+        if: steps.cache-python-deps.outputs.cache-hit != 'true'
 
+      # 步骤5：缓存 ESPHome 编译产物（.esphome 目录，避免重复编译中间文件）
+      - name: 缓存 ESPHome 编译缓存
+        uses: actions/cache@v4
+        id: cache-esphome-build
+        with:
+          # 缓存目录：ESPHome 的编译缓存和构建目录（你的 Modular 目录下的 .esphome）
+          path: devices/Under_Development/Modular/.esphome
+          # 缓存密钥：基于 YAML 配置文件内容生成，配置不变则复用缓存
+          key: ${{ runner.os }}-esphome-build-${{ hashFiles('devices/Under_Development/Modular/**/*.yaml') }}-v1
+          # 缓存回退：使用同系统的最新 ESPHome 编译缓存
+          restore-keys: |
+            ${{ runner.os }}-esphome-build-
+
+      # 步骤6：生成 secrets.yaml（若你使用 GitHub 密钥方案，保留此步骤；手动创建则注释）
       - name: 生成 ESPHome secrets.yaml 文件
         run: |
-          # 进入 Modular 目录（与 Lichuang_s3_cam.yaml 同级）
           cd devices/Under_Development/Modular
-          # 自动生成 secrets.yaml 文件，将 GitHub 密钥注入其中
           cat > secrets.yaml << EOF
-          # 由 GitHub Actions 自动生成，无需手动提交
           wifi_ssid: "${{ secrets.WIFI_SSID }}"
           wifi_password: "${{ secrets.WIFI_PASSWORD }}"
           ota_password: "${{ secrets.OTA_PASSWORD }}"
           api_encryption_key: "${{ secrets.API_ENCRYPTION_KEY }}"
           EOF
-          # 可选：打印生成的文件（仅查看结构，不显示敏感值）
-          cat secrets.yaml
 
-      # 步骤4：编译 Lichuang_s3_cam.yaml 固件
+      # 步骤7：编译 Lichuang_s3_cam 固件（缓存命中时复用已有编译产物）
       - name: 编译 Lichuang_s3_cam ESPHome 配置
         run: |
-          # 进入配置文件所在目录（关键：路径要与你的仓库完全一致）
           cd devices/Under_Development/Modular
-          # 执行 ESPHome 编译命令，生成固件
           esphome compile Lichuang_s3_cam.yaml
 
-      # 步骤5：上传编译后的固件作为产物（可选，方便你下载使用）
-      - name: 上传编译产物
+      # 步骤8：动态查找 firmware.bin 路径
+      - name: 动态查找 firmware.bin 路径
+        id: find_firmware
+        run: |
+          cd devices/Under_Development/Modular
+          # 查找核心固件
+          FIRMWARE_PATH=$(find . -name "firmware.bin" -path "./.esphome/build/*" | head -n 1)
+          # 查找OTA固件
+          OTA_FIRMWARE_PATH=$(find . -name "firmware.ota.bin" -path "./.esphome/build/*" | head -n 1)
+          # 查找工厂固件
+          FACTORY_FIRMWARE_PATH=$(find . -name "firmware.factory.bin" -path "./.esphome/build/*" | head -n 1)
+
+          # 容错处理
+          if [ -n "$FIRMWARE_PATH" ]; then
+            echo "FIRMWARE_PATH=$FIRMWARE_PATH" >> $GITHUB_OUTPUT
+            echo "找到核心固件：$FIRMWARE_PATH"
+          else
+            echo "未找到 firmware.bin！"
+            exit 1
+          fi
+
+          if [ -n "$OTA_FIRMWARE_PATH" ]; then
+            echo "OTA_FIRMWARE_PATH=$OTA_FIRMWARE_PATH" >> $GITHUB_OUTPUT
+            echo "找到OTA固件：$OTA_FIRMWARE_PATH"
+          fi
+
+          if [ -n "$FACTORY_FIRMWARE_PATH" ]; then
+            echo "FACTORY_FIRMWARE_PATH=$FACTORY_FIRMWARE_PATH" >> $GITHUB_OUTPUT
+            echo "找到工厂固件：$FACTORY_FIRMWARE_PATH"
+          fi
+
+          FIRMWARE_NAME=$(basename "$FIRMWARE_PATH")
+          echo "FIRMWARE_NAME=$FIRMWARE_NAME" >> $GITHUB_OUTPUT
+
+      # 步骤9：上传 Lichuang_s3_cam 固件
+      - name: 上传 Lichuang_s3_cam 固件
         uses: actions/upload-artifact@v4
         with:
-          # 产物名称，在 GitHub Actions 面板中可识别
           name: Lichuang_s3_cam-firmware
-          # 固件存放路径（ESPHome 编译后默认生成在 .esphome/build/ 目录下）
           path: |
-            devices/Under_Development/Modular/.esphome/build/**/*.bin
-          # 产物保留时间（默认 90 天，可自定义，如 7 天：7 days）
+            ${{ steps.find_firmware.outputs.FIRMWARE_PATH }}
+            ${{ steps.find_firmware.outputs.OTA_FIRMWARE_PATH }}
+            ${{ steps.find_firmware.outputs.FACTORY_FIRMWARE_PATH }}
+            devices/Under_Development/Modular/Lichuang_s3_cam.yaml
           retention-days: 30
