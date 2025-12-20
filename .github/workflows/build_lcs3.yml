@@ -50,36 +50,34 @@ jobs:
       - name: 动态查找 firmware.bin 路径
         id: find_firmware
         run: |
-          # 直接在仓库根目录查找（不 cd 到 Modular 子目录，保持路径基准统一）
-          # 查找核心固件
-          FIRMWARE_PATH=$(find . -name "firmware.bin" -path "./.esphome/build/*/firmware.bin" | head -n 1)
-          # 查找OTA固件
-          OTA_FIRMWARE_PATH=$(find . -name "firmware.ota.bin" -path "./.esphome/build/*/firmware.ota.bin" | head -n 1)
-          # 查找工厂固件
-          FACTORY_FIRMWARE_PATH=$(find . -name "firmware.factory.bin" -path "./.esphome/build/*/firmware.factory.bin" | head -n 1)
+          # 统一在编译目录里找，避免路径漂移
+          SEARCH_ROOT="devices/Under_Development/Modular/.esphome/build"
 
-          # 输出核心固件路径（必须存在，否则终止）
+          # 核心固件
+          FIRMWARE_PATH=$(find "$SEARCH_ROOT" -name "firmware.bin" | head -n 1)
+          # OTA 固件
+          OTA_FIRMWARE_PATH=$(find "$SEARCH_ROOT" -name "firmware.ota.bin" | head -n 1)
+          # 工厂固件
+          FACTORY_FIRMWARE_PATH=$(find "$SEARCH_ROOT" -name "firmware.factory.bin" | head -n 1)
+
+          # 必须找到 firmware.bin
           if [ -n "$FIRMWARE_PATH" ]; then
             echo "FIRMWARE_PATH=$FIRMWARE_PATH" >> $GITHUB_OUTPUT
-            FIRMWARE_NAME=$(basename "$FIRMWARE_PATH")
-            echo "FIRMWARE_NAME=$FIRMWARE_NAME" >> $GITHUB_OUTPUT
+            echo "FIRMWARE_NAME=$(basename "$FIRMWARE_PATH")" >> $GITHUB_OUTPUT
             echo "找到核心固件：$FIRMWARE_PATH"
           else
             echo "未找到 firmware.bin！"
             exit 1
           fi
 
-          # 可选输出OTA固件路径
-          if [ -n "$OTA_FIRMWARE_PATH" ]; then
-            echo "OTA_FIRMWARE_PATH=$OTA_FIRMWARE_PATH" >> $GITHUB_OUTPUT
+          # 可选输出
+          [ -n "$OTA_FIRMWARE_PATH" ] && \
+            echo "OTA_FIRMWARE_PATH=$OTA_FIRMWARE_PATH" >> $GITHUB_OUTPUT && \
             echo "找到OTA固件：$OTA_FIRMWARE_PATH"
-          fi
 
-          # 可选输出工厂固件路径
-          if [ -n "$FACTORY_FIRMWARE_PATH" ]; then
-            echo "FACTORY_FIRMWARE_PATH=$FACTORY_FIRMWARE_PATH" >> $GITHUB_OUTPUT
+          [ -n "$FACTORY_FIRMWARE_PATH" ] && \
+            echo "FACTORY_FIRMWARE_PATH=$FACTORY_FIRMWARE_PATH" >> $GITHUB_OUTPUT && \
             echo "找到工厂固件：$FACTORY_FIRMWARE_PATH"
-          fi
 
       # 步骤7：上传 Lichuang_s3_cam 固件
       - name: 上传 Lichuang_s3_cam 固件
