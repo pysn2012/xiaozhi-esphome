@@ -81,35 +81,35 @@ jobs:
       - name: 动态查找 firmware.bin 路径
         id: find_firmware
         run: |
-          cd devices/Under_Development/Modular
-          # 查找核心固件
-          FIRMWARE_PATH=$(find . -name "firmware.bin" -path "./.esphome/build/*" | head -n 1)
-          # 查找OTA固件
-          OTA_FIRMWARE_PATH=$(find . -name "firmware.ota.bin" -path "./.esphome/build/*" | head -n 1)
-          # 查找工厂固件
-          FACTORY_FIRMWARE_PATH=$(find . -name "firmware.factory.bin" -path "./.esphome/build/*" | head -n 1)
+          # 查找核心固件（沿用成功方案的查找逻辑）
+          FIRMWARE_PATH=$(find . -name "firmware.bin" -path "./.esphome/build/*/firmware.bin" | head -n 1)
+          # 查找OTA固件（同基准目录，同逻辑扩展）
+          OTA_FIRMWARE_PATH=$(find . -name "firmware.ota.bin" -path "./.esphome/build/*/firmware.ota.bin" | head -n 1)
+          # 查找工厂固件（同基准目录，同逻辑扩展）
+          FACTORY_FIRMWARE_PATH=$(find . -name "firmware.factory.bin" -path "./.esphome/build/*/firmware.factory.bin" | head -n 1)
 
-          # 容错处理
+          # 输出核心固件路径（必须存在，否则终止）
           if [ -n "$FIRMWARE_PATH" ]; then
             echo "FIRMWARE_PATH=$FIRMWARE_PATH" >> $GITHUB_OUTPUT
+            FIRMWARE_NAME=$(basename "$FIRMWARE_PATH")
+            echo "FIRMWARE_NAME=$FIRMWARE_NAME" >> $GITHUB_OUTPUT
             echo "找到核心固件：$FIRMWARE_PATH"
           else
             echo "未找到 firmware.bin！"
             exit 1
           fi
 
+          # 可选输出OTA固件路径
           if [ -n "$OTA_FIRMWARE_PATH" ]; then
             echo "OTA_FIRMWARE_PATH=$OTA_FIRMWARE_PATH" >> $GITHUB_OUTPUT
             echo "找到OTA固件：$OTA_FIRMWARE_PATH"
           fi
 
+          # 可选输出工厂固件路径
           if [ -n "$FACTORY_FIRMWARE_PATH" ]; then
             echo "FACTORY_FIRMWARE_PATH=$FACTORY_FIRMWARE_PATH" >> $GITHUB_OUTPUT
             echo "找到工厂固件：$FACTORY_FIRMWARE_PATH"
           fi
-
-          FIRMWARE_NAME=$(basename "$FIRMWARE_PATH")
-          echo "FIRMWARE_NAME=$FIRMWARE_NAME" >> $GITHUB_OUTPUT
 
       # 步骤9：上传 Lichuang_s3_cam 固件
       - name: 上传 Lichuang_s3_cam 固件
