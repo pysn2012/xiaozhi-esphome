@@ -72,8 +72,6 @@ jobs:
           name: Lichuang_s3_cam-firmware
           # 固件存放路径（ESPHome 编译后默认生成在 .esphome/build/ 目录下）
           path: |
-            devices/Under_Development/Modular/.esphome/build/
-            # 明确指定 yaml 配置文件（可选，便于核对配置）
-            devices/Under_Development/Modular/Lichuang_s3_cam.yaml
+            devices/Under_Development/Modular/.esphome/build/**/*.bin
           # 产物保留时间（默认 90 天，可自定义，如 7 天：7 days）
           retention-days: 30
