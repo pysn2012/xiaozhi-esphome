@@ -1,0 +1,64 @@
+# 工作流名称，在 GitHub Actions 面板中显示
+name: 编译 Lichuang_s3_cam ESPHome 固件
+
+# 触发条件：可选多种触发方式，按需启用
+on:
+  # 1. 手动触发（推荐，可在 GitHub 页面手动点击运行编译）
+  workflow_dispatch:
+  # 2. 当仓库有 push 提交时自动触发（推送到 main 分支时编译，可注释或修改分支）
+  # push:
+  #   branches: [ main ]
+  #   # 仅当指定文件修改时触发，避免无关提交浪费资源
+  #   paths:
+  #     - 'devices/Under_Development/Modular/Lichuang_s3_cam.yaml'
+  #     - 'devices/Under_Development/Modular/core.yaml'
+  #     - 'devices/Under_Development/Modular/HW/**'
+  #     - 'devices/Under_Development/Modular/display_pages.yaml'
+  # 3. 当有 pull request 提交到 main 分支时触发
+  # pull_request:
+  #   branches: [ main ]
+
+# 工作流任务定义
+jobs:
+  compile-esphome:
+    # 运行环境：使用 Ubuntu 最新版（GitHub 托管虚拟机）
+    runs-on: ubuntu-latest
+    # 任务步骤
+    steps:
+      # 步骤1：拉取你的仓库代码到虚拟机
+      - name: 拉取仓库代码
+        uses: actions/checkout@v4
+
+      # 步骤2：设置 Python 环境（ESPHome 依赖 Python）
+      - name: 配置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'  # 兼容 ESPHome 的 Python 版本，推荐 3.9+
+
+      # 步骤3：安装 ESPHome 依赖
+      - name: 安装 ESPHome
+        run: |
+          python -m pip install --upgrade pip
+          pip install esphome
+
+      # 步骤4：编译 Lichuang_s3_cam.yaml 固件
+      - name: 编译 Lichuang_s3_cam ESPHome 配置
+        run: |
+          # 进入配置文件所在目录（关键：路径要与你的仓库完全一致）
+          cd devices/Under_Development/Modular
+          # 执行 ESPHome 编译命令，生成固件
+          esphome compile Lichuang_s3_cam.yaml
+
+      # 步骤5：上传编译后的固件作为产物（可选，方便你下载使用）
+      - name: 上传编译产物
+        uses: actions/upload-artifact@v4
+        with:
+          # 产物名称，在 GitHub Actions 面板中可识别
+          name: Lichuang_s3_cam-firmware
+          # 固件存放路径（ESPHome 编译后默认生成在 .esphome/build/ 目录下）
+          path: |
+            devices/Under_Development/Modular/.esphome/build/
+            # 明确指定 yaml 配置文件（可选，便于核对配置）
+            devices/Under_Development/Modular/Lichuang_s3_cam.yaml
+          # 产物保留时间（默认 90 天，可自定义，如 7 天：7 days）
+          retention-days: 30
