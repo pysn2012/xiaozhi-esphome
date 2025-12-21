@@ -1,0 +1,92 @@
+# 工作流名称
+name: build BOX3 ESPHome
+
+# 触发条件
+on:
+  workflow_dispatch:  # 手动触发（推荐）
+  # push:  # 自动触发（可选，按需启用）
+  #   branches: [ main ]
+  #   paths:
+  #     - 'devices/Under_Development/Modular/**'
+
+jobs:
+  compile-esphome:
+    runs-on: ubuntu-latest
+    steps:
+      # 步骤1：拉取仓库代码
+      - name: 拉取仓库代码
+        uses: actions/checkout@v4
+
+      # 步骤2：配置 Python 环境
+      - name: 配置 Python 环境
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      # 步骤3：安装 ESPHome（移除缓存，每次都正常安装，避免 command not found）
+      - name: 安装 ESPHome
+        run: |
+          python -m pip install --upgrade pip
+          pip install esphome
+
+      # 步骤4：生成 secrets.yaml（若你使用 GitHub 密钥方案，保留此步骤；手动创建则注释）
+      - name: 生成 ESPHome secrets.yaml 文件
+        run: |
+          cd devices/Under_Development/Modular
+          cat > secrets.yaml << EOF
+          wifi_ssid: "${{ secrets.WIFI_SSID }}"
+          wifi_password: "${{ secrets.WIFI_PASSWORD }}"
+          ota_password: "${{ secrets.OTA_PASSWORD }}"
+          api_encryption_key: "${{ secrets.API_ENCRYPTION_KEY }}"
+          EOF
+
+      # 步骤5：编译 BOX3 固件
+      - name: 编译 BOX3 配置
+        run: |
+          cd devices/Under_Development/Modular
+          esphome compile esp32-s3-box-3.yaml
+
+      # 步骤6：动态查找 firmware.bin 路径（沿用成功方案：仓库根目录直接查找，避免路径歧义）
+      - name: 动态查找 firmware.bin 路径
+        id: find_firmware
+        run: |
+          # 统一在编译目录里找，避免路径漂移
+          SEARCH_ROOT="devices/Under_Development/Modular/.esphome/build"
+
+          # 核心固件
+          FIRMWARE_PATH=$(find "$SEARCH_ROOT" -name "firmware.bin" | head -n 1)
+          # OTA 固件
+          OTA_FIRMWARE_PATH=$(find "$SEARCH_ROOT" -name "firmware.ota.bin" | head -n 1)
+          # 工厂固件
+          FACTORY_FIRMWARE_PATH=$(find "$SEARCH_ROOT" -name "firmware.factory.bin" | head -n 1)
+
+          # 必须找到 firmware.bin
+          if [ -n "$FIRMWARE_PATH" ]; then
+            echo "FIRMWARE_PATH=$FIRMWARE_PATH" >> $GITHUB_OUTPUT
+            echo "FIRMWARE_NAME=$(basename "$FIRMWARE_PATH")" >> $GITHUB_OUTPUT
+            echo "找到核心固件：$FIRMWARE_PATH"
+          else
+            echo "未找到 firmware.bin！"
+            exit 1
+          fi
+
+          # 可选输出
+          [ -n "$OTA_FIRMWARE_PATH" ] && \
+            echo "OTA_FIRMWARE_PATH=$OTA_FIRMWARE_PATH" >> $GITHUB_OUTPUT && \
+            echo "找到OTA固件：$OTA_FIRMWARE_PATH"
+
+          [ -n "$FACTORY_FIRMWARE_PATH" ] && \
+            echo "FACTORY_FIRMWARE_PATH=$FACTORY_FIRMWARE_PATH" >> $GITHUB_OUTPUT && \
+            echo "找到工厂固件：$FACTORY_FIRMWARE_PATH"
+
+      # 步骤7：上传 BOX3 固件
+      - name: 上传 BOX3 固件
+        uses: actions/upload-artifact@v4
+        with:
+          name: BOX3-firmware
+          path: |
+            ${{ steps.find_firmware.outputs.FIRMWARE_PATH }}
+            ${{ steps.find_firmware.outputs.OTA_FIRMWARE_PATH }}
+            ${{ steps.find_firmware.outputs.FACTORY_FIRMWARE_PATH }}
+            devices/Under_Development/Modular/esp32-s3-box-3.yaml
+          retention-days: 30

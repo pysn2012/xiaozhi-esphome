@@ -71,18 +71,8 @@ psram:
 ### USE MODULES FROM GITHUB (default) ############################################################################################################
 
 packages:
-  core:
-    url: https://github.com/RealDeco/xiaozhi-esphome.git
-    ref: main
-    refresh: 0s
-    files:
-      - devices/Under_Development/Modular/core.yaml
-  hw:
-    url: https://github.com/RealDeco/xiaozhi-esphome.git
-    ref: main
-    refresh: 0s
-    files:
-      - devices/Under_Development/Modular/HW/esp32-s3-box-3_hw.yaml
+  core: !include core.yaml
+  hw: !include HW/esp32-s3-box-3_hw.yaml
 
 ### USE LOCAL MODULES (read description https://github.com/RealDeco/xiaozhi-esphome/blob/main/devices/Under_Development/Modular/README.md) #######
 
